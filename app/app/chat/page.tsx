@@ -2,6 +2,7 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import { AI_MODELS, DAILY_REQUEST_LIMIT } from '@/lib/ai/models';
 
 type Conversation = { id: string; title: string; model: string; updated_at: string };
 type Message = { id: string; role: 'user' | 'assistant' | 'system'; content: string; created_at: string };
@@ -15,6 +16,8 @@ export default function ChatPage() {
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [error, setError] = useState('');
   const [streamingText, setStreamingText] = useState('');
+  const [model, setModel] = useState(AI_MODELS[0].id);
+  const [remaining, setRemaining] = useState(DAILY_REQUEST_LIMIT);
 
   async function loadConversation(id: string) {
     setActiveId(id);
@@ -58,7 +61,12 @@ export default function ChatPage() {
     return data.conversation.id as string;
   }
 
-  useEffect(() => { void loadConversations(); }, []);
+  useEffect(() => {
+    void loadConversations();
+    void fetch('/api/usage', { cache: 'no-store' }).then((r) => r.json()).then((data) => {
+      if (typeof data.remaining === 'number') setRemaining(data.remaining);
+    }).catch(() => {});
+  }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -78,7 +86,7 @@ export default function ChatPage() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ conversationId, messages: history }),
+        body: JSON.stringify({ conversationId, messages: history, model }),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -100,6 +108,8 @@ export default function ChatPage() {
       }
 
       setStreamingText('');
+      const headerRemaining = response.headers.get('x-nexa-remaining');
+      if (headerRemaining) setRemaining(Number(headerRemaining));
       setMessages((current) => [...current, {
         id: `local-assistant-${Date.now()}`, role: 'assistant', content: answer, created_at: new Date().toISOString(),
       }]);
@@ -146,7 +156,15 @@ export default function ChatPage() {
           </div>
         </aside>
         <section className="flex min-h-screen flex-col">
-          <header className="border-b border-white/10 px-6 py-4"><a href="/app" className="text-sm text-slate-400 hover:text-white">← Workspace</a></header>
+          <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+            <a href="/app" className="text-sm text-slate-400 hover:text-white">← Workspace</a>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-500">{remaining}/{DAILY_REQUEST_LIMIT} requests left today</span>
+              <select value={model} onChange={(event) => setModel(event.target.value)} className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-xs text-slate-200">
+                {AI_MODELS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              </select>
+            </div>
+          </header>
           <div className="flex-1 space-y-4 overflow-y-auto px-6 py-8">
             {messages.length === 0 && <div className="mx-auto mt-20 max-w-xl text-center"><h2 className="text-3xl font-semibold">How can NexaAI help?</h2><p className="mt-3 text-slate-400">Your conversations are stored securely in your account.</p></div>}
             {messages.map((message) => (
