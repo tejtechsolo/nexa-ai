@@ -2,30 +2,54 @@
 
 NexaAI is a secure, extensible AI-chatbot SaaS foundation for conversations, research, files, agents, integrations, and team workflows.
 
-## Current milestone
+> Status: active development. The repository is not production-ready until all security, provider, billing, observability, and deployment checks are completed.
 
-Implemented:
+## Milestone status
+
+### Implemented
 
 - Next.js App Router foundation
-- TypeScript and strict compiler settings
+- TypeScript strict configuration
 - Tailwind CSS/PostCSS setup
 - SEO metadata foundation
-- PWA web app manifest
+- PWA manifest and install metadata
 - Cross-platform install prompt
 - SVG app icon
+- Supabase browser/server clients
+- Supabase session-refresh middleware
+- Login, signup, and password-recovery screens
+- OAuth callback and sign-out route
+- Protected `/app` workspace shell
+- Initial profiles table with Row Level Security
+- Vitest test foundation
 - Environment variable template
 
-Planned modules are intentionally delivered incrementally: authentication, database/RLS, chat providers, streaming, usage limits, billing, teams, admin/RBAC, files/RAG, agents, observability, and automated deployment.
+### In progress / planned
 
-## Tech stack
+- Password reset completion screen
+- Conversation database model
+- AI provider adapters and streaming responses
+- Model selection and usage metering
+- Rate limiting and abuse protection
+- Files, embeddings, and RAG
+- Agents and workflow execution
+- Teams, invitations, and granular RBAC
+- Admin console
+- Stripe billing and plan enforcement
+- Audit logs, observability, and alerting
+- End-to-end browser tests
+- Production CI/CD and deployment hardening
 
-- Next.js + React + TypeScript
-- Supabase Auth/PostgreSQL/RLS
+## Technology stack
+
+- Next.js App Router, React, and TypeScript
+- Supabase Auth, PostgreSQL, and Row Level Security
 - Provider adapters for OpenAI, Anthropic, Google, and OpenRouter
-- Vercel deployment
-- Vitest for unit tests
+- Vercel deployment target
+- Vitest unit/contract tests
+- PWA web installation support
 
-## Local setup
+## Quick start
 
 ```bash
 npm install
@@ -35,38 +59,7 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-Do not commit `.env.local`. Public variables may be exposed to the browser; service keys, provider keys, encryption keys, and webhook secrets must remain server-side.
-
-## Environment variables
-
-See `.env.example`. At minimum, configure:
-
-- `NEXT_PUBLIC_APP_URL`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `AUTH_SECRET`
-
-Provider, email, billing, and integration variables are enabled only when their corresponding modules are implemented and configured.
-
-## First-time user guide
-
-1. Open the deployed NexaAI URL.
-2. Select **Create account** when authentication is enabled.
-3. Verify your email if email confirmation is enabled in Supabase.
-4. Sign in and open the workspace.
-5. Start a conversation, choose a model when model selection is available, and review usage before sending large requests.
-6. Use the sidebar for conversations, files, agents, settings, and billing as those modules become available.
-7. Install NexaAI:
-   - Chrome/Edge desktop: select the install icon in the address bar or use the in-app **Install now** prompt.
-   - Android Chrome: open the browser menu and choose **Install app** or **Add to Home screen**.
-   - iPhone/iPad: open in Safari, tap **Share**, then **Add to Home Screen**.
-   - If no install button appears, the browser may not support the custom prompt or the app may already be installed.
-
-## PWA installation notes
-
-The install experience uses the standard web app manifest and the Chromium `beforeinstallprompt` event. The custom prompt is not available on every browser; iOS uses the manual Share-menu flow. Production installation requires HTTPS and valid manifest/icon assets.
-
-## Quality checks
+Run quality checks:
 
 ```bash
 npm run typecheck
@@ -75,15 +68,94 @@ npm test
 npm run build
 ```
 
-## Security baseline
+## Environment configuration
 
-- Never expose Supabase service-role keys in client code.
-- Validate all untrusted input with schemas at API boundaries.
-- Enforce authorization in server code and PostgreSQL RLS; do not rely on hidden UI controls.
-- Add rate limits before exposing public AI endpoints.
-- Store provider keys only in encrypted server-side configuration.
-- Record security-sensitive actions in an audit log.
+Copy `.env.example` to `.env.local` and configure:
 
-## Repository workflow
+```env
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_APP_NAME=NexaAI
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+AUTH_SECRET=generate_a_long_random_value
+```
 
-Use short feature branches, pull requests, required checks, and reviewed migrations. Deploy previews from pull requests and production only from the protected default branch.
+Additional provider, email, billing, and integration variables should only be populated when their corresponding modules are enabled.
+
+Never commit `.env.local`. Only variables prefixed with `NEXT_PUBLIC_` are intended for browser exposure. Service-role keys, AI provider keys, encryption keys, payment secrets, and webhook secrets must remain server-side.
+
+## Supabase setup
+
+1. Create a Supabase project.
+2. Copy the project URL and anon/publishable key into `.env.local`.
+3. In Supabase Authentication settings, configure the site URL:
+   - Local: `http://localhost:3000`
+   - Production: your HTTPS application URL
+4. Add redirect URLs:
+   - `http://localhost:3000/auth/callback`
+   - `https://your-domain.example/auth/callback`
+5. Apply the SQL migration in `supabase/migrations/0001_profiles.sql` using the Supabase SQL editor or Supabase CLI.
+6. Test signup, email verification, login, and logout.
+
+## First-time user guide
+
+1. Open the NexaAI website.
+2. Select **Create account**.
+3. Enter an email and a password with at least eight characters.
+4. Verify your email if confirmation is enabled in Supabase.
+5. Return to the login page and sign in.
+6. You will be redirected to `/app`, the protected workspace.
+7. The current workspace shows the planned conversation, files, and agents areas. These are deliberately marked as coming soon until their backend services are implemented.
+8. Use **Forgot password?** to request a recovery email.
+
+### Installing NexaAI as a desktop or mobile app
+
+NexaAI is designed as a Progressive Web App.
+
+- **Chrome or Edge desktop:** open the deployed HTTPS site, select the install icon in the address bar, and confirm installation. If available, use the in-app install prompt.
+- **Android Chrome:** open the browser menu and select **Install app** or **Add to Home screen**.
+- **iPhone/iPad:** open NexaAI in Safari, tap **Share**, then choose **Add to Home Screen**.
+- **If the install option is missing:** confirm that the site uses HTTPS, the manifest loads, required icons exist, and the browser supports installation. iOS does not expose the Chromium `beforeinstallprompt` event and therefore uses the manual Safari flow.
+
+After installation, NexaAI opens in a standalone application window when the browser supports it.
+
+## Architecture principles
+
+- Keep secrets on the server.
+- Use Supabase Auth for identity and PostgreSQL RLS for data isolation.
+- Validate all external input at API boundaries.
+- Enforce authorization in server code and database policies, not only in the UI.
+- Add rate limiting before exposing AI-generation endpoints.
+- Use provider adapters so AI vendors can be changed without rewriting product logic.
+- Track usage, costs, failures, and security-sensitive actions.
+- Prefer small feature modules with reusable UI and service layers.
+
+## Testing strategy
+
+Current tests are a foundation and do not replace browser or integration tests.
+
+- Unit tests: validation, utility functions, provider adapters
+- Integration tests: Supabase queries, RLS, auth flows, API routes
+- End-to-end tests: signup, verification, login, chat, logout, installation UX
+- Security tests: unauthorized access, tenant isolation, rate limits, secret exposure
+
+Run tests with:
+
+```bash
+npm test
+npm run test:watch
+```
+
+## Git workflow
+
+1. Create a feature branch.
+2. Implement one bounded feature.
+3. Run typecheck, lint, tests, and build.
+4. Open a pull request.
+5. Review migrations and security-sensitive code.
+6. Merge only after required checks pass.
+7. Deploy production from the protected default branch.
+
+## License
+
+License terms will be added before the first public production release.
