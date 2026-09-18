@@ -1,0 +1,9 @@
+import { redirect } from 'next/navigation';
+import { createClient } from '@/lib/supabase/server';
+
+export default async function WorkspacePage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+  return <main className="min-h-screen bg-[#070b14] px-6 py-10 text-white"><div className="mx-auto max-w-6xl"><div className="mb-10 flex items-center justify-between"><div><p className="text-sm text-cyan-300">NexaAI workspace</p><h1 className="mt-2 text-4xl font-semibold">Welcome back</h1><p className="mt-2 text-slate-400">{user.email}</p></div><form action="/auth/signout" method="post"><button className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-white/5">Sign out</button></form></div><section className="grid gap-5 md:grid-cols-3"><article className="rounded-2xl border border-white/10 bg-white/[0.04] p-6"><h2 className="font-semibold">New conversation</h2><p className="mt-2 text-sm text-slate-400">Start a secure AI conversation. Provider connections arrive in the next milestone.</p><button disabled className="mt-5 rounded-xl bg-white/10 px-4 py-2 text-sm text-slate-500">Coming soon</button></article><article className="rounded-2xl border border-white/10 bg-white/[0.04] p-6"><h2 className="font-semibold">Knowledge files</h2><p className="mt-2 text-sm text-slate-400">Organize documents for future retrieval-augmented conversations.</p><button disabled className="mt-5 rounded-xl bg-white/10 px-4 py-2 text-sm text-slate-500">Coming soon</button></article><article className="rounded-2xl border border-white/10 bg-white/[0.04] p-6"><h2 className="font-semibold">Agents & workflows</h2><p className="mt-2 text-sm text-slate-400">Create repeatable AI workflows with permissions and usage controls.</p><button disabled className="mt-5 rounded-xl bg-white/10 px-4 py-2 text-sm text-slate-500">Coming soon</button></article></section></div></main>;
+}
