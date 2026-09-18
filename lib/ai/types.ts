@@ -15,4 +15,5 @@ export type AIProvider = {
   id: string;
   name: string;
   chat(input: ChatRequest): Promise<string>;
+  stream(input: ChatRequest): Promise<ReadableStream<Uint8Array>>;
 };
