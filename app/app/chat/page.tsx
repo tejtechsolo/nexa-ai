@@ -14,6 +14,7 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [error, setError] = useState('');
+  const [streamingText, setStreamingText] = useState('');
 
   async function loadConversation(id: string) {
     setActiveId(id);
@@ -79,11 +80,28 @@ export default function ChatPage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ conversationId, messages: history }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Request failed');
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Request failed');
+      }
 
+      if (!response.body) throw new Error('Streaming is not supported by this response');
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let answer = '';
+      setStreamingText('');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        answer += chunk;
+        setStreamingText(answer);
+      }
+
+      setStreamingText('');
       setMessages((current) => [...current, {
-        id: `local-assistant-${Date.now()}`, role: 'assistant', content: data.answer, created_at: new Date().toISOString(),
+        id: `local-assistant-${Date.now()}`, role: 'assistant', content: answer, created_at: new Date().toISOString(),
       }]);
       setConversations((current) => current.map((item) =>
         item.id === conversationId
@@ -137,7 +155,7 @@ export default function ChatPage() {
                 <div className="whitespace-pre-wrap leading-7 text-slate-100">{message.content}</div>
               </div>
             ))}
-            {loading && <div className="max-w-3xl rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-slate-400">NexaAI is thinking…</div>}
+            {loading && <div className="max-w-3xl rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-slate-100"><p className="mb-2 text-xs uppercase tracking-wide text-slate-500">assistant · streaming</p><div className="whitespace-pre-wrap leading-7">{streamingText || 'NexaAI is thinking…'}</div></div>}
           </div>
           <form onSubmit={submit} className="border-t border-white/10 p-5">
             {error && <p className="mb-3 rounded-lg border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{error}</p>}
