@@ -9,6 +9,12 @@ NexaAI is a secure, extensible AI-chatbot SaaS foundation for conversations, res
 ### Implemented
 
 - Next.js App Router foundation
+- Persistent conversations and message history
+- Streaming AI responses with resilient SSE parsing
+- Daily AI usage quota and model allowlist
+- Advanced chat UX: Markdown, GFM, syntax-highlighted code, copy actions, regenerate, edit/resend, stop generation, auto-scroll, timestamps, search, rename, keyboard shortcuts, prompt suggestions, and responsive mobile navigation
+- Secure conversation rewind endpoint for editing history
+- GitHub Actions quality workflow for typecheck, lint, tests, and build
 - TypeScript strict configuration
 - Tailwind CSS/PostCSS setup
 - SEO metadata foundation
@@ -27,10 +33,15 @@ NexaAI is a secure, extensible AI-chatbot SaaS foundation for conversations, res
 ### In progress / planned
 
 - Password reset completion screen
-- Conversation database model
-- AI provider adapters and streaming responses
-- Model selection and usage metering
-- Rate limiting and abuse protection
+- Additional provider adapters (Anthropic, Google, OpenRouter)
+- Files, embeddings, and RAG
+- Agents and workflow execution
+- Teams, invitations, and granular RBAC
+- Admin console
+- Stripe billing and plan enforcement
+- Audit logs, observability, and alerting
+- End-to-end browser tests
+- Production CI/CD and deployment hardening
 - Files, embeddings, and RAG
 - Agents and workflow execution
 - Teams, invitations, and granular RBAC
