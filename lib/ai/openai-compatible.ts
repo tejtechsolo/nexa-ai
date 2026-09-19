@@ -19,6 +19,7 @@ export function createOpenAICompatibleProvider(): AIProvider {
           temperature: input.temperature ?? 0.7,
         }),
         cache: 'no-store',
+        signal: input.signal,
       });
 
       if (!response.ok) {
@@ -46,6 +47,7 @@ export function createOpenAICompatibleProvider(): AIProvider {
           stream: true,
         }),
         cache: 'no-store',
+        signal: input.signal,
       });
 
       if (!response.ok || !response.body) {
@@ -55,36 +57,53 @@ export function createOpenAICompatibleProvider(): AIProvider {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let buffer = '';
+
       return new ReadableStream<Uint8Array>({
         async pull(controller) {
-          const { done, value } = await reader.read();
-          if (done) {
+          try {
+            const { done, value } = await reader.read();
+            if (done) {
+              buffer += decoder.decode();
+              processBuffer(controller, true);
+              if (controller.desiredSize !== null) controller.close();
+              return;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+            processBuffer(controller, false);
+          } catch (error) {
+            controller.error(error);
+          }
+        },
+        async cancel(reason) {
+          await reader.cancel(reason);
+        },
+      });
+
+      function processBuffer(controller: ReadableStreamDefaultController<Uint8Array>, final: boolean) {
+        const events = buffer.split(/\r?\n\r?\n/);
+        if (!final) buffer = events.pop() ?? '';
+        else buffer = '';
+
+        for (const event of events) {
+          const dataLines = event.split(/\r?\n/).filter((line) => line.startsWith('data:'));
+          if (!dataLines.length) continue;
+          const payload = dataLines.map((line) => line.slice(5).trimStart()).join('\n').trim();
+          if (!payload) continue;
+          if (payload === '[DONE]') {
             controller.close();
             return;
           }
-
-          const text = decoder.decode(value, { stream: true });
-          const lines = text.split(/\r?\n/);
-          for (const line of lines) {
-            if (!line.startsWith('data:')) continue;
-            const payload = line.slice(5).trim();
-            if (payload === '[DONE]') {
-              controller.close();
-              return;
-            }
-            try {
-              const json = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string } }> };
-              const content = json.choices?.[0]?.delta?.content;
-              if (content) controller.enqueue(encoder.encode(content));
-            } catch {
-              // Ignore incomplete SSE frames; the upstream reader will deliver subsequent bytes.
-            }
+          try {
+            const json = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string | null } }> };
+            const content = json.choices?.[0]?.delta?.content;
+            if (content) controller.enqueue(encoder.encode(content));
+          } catch {
+            // Preserve malformed/partial upstream data without exposing it to the client.
           }
-        },
-        async cancel() {
-          await reader.cancel();
-        },
-      });
+        }
+      }
     },
   };
 }
