@@ -79,6 +79,27 @@ export async function POST(request: Request) {
     async function finalizeAssistant() {
       if (finalized || !assistantText) return;
       finalized = true;
+
+      if (action === 'regenerate') {
+        const { data: previousAssistant } = await supabase.from('messages')
+          .select('id')
+          .eq('conversation_id', conversationId)
+          .eq('user_id', user.id)
+          .eq('role', 'assistant')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (previousAssistant) {
+          const { error: deleteError } = await supabase.from('messages')
+            .delete()
+            .eq('id', previousAssistant.id)
+            .eq('conversation_id', conversationId)
+            .eq('user_id', user.id);
+          if (deleteError) console.error('regenerate_cleanup_error', deleteError);
+        }
+      }
+
       const { error } = await supabase.from('messages').insert({
         conversation_id: conversationId, user_id: user.id, role: 'assistant', content: assistantText,
       });
