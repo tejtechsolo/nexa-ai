@@ -9,6 +9,7 @@ export type ChatRequest = {
   messages: ChatMessage[];
   model?: string;
   temperature?: number;
+  signal?: AbortSignal;
 };
 
 export type AIProvider = {
