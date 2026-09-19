@@ -3,6 +3,7 @@ import { isAllowedModel } from '@/lib/ai/models';
 
 export const chatRequestSchema = z.object({
   conversationId: z.string().uuid(),
+  action: z.enum(['send', 'regenerate']).default('send'),
   messages: z.array(z.object({
     role: z.enum(['user', 'assistant', 'system']),
     content: z.string().trim().min(1).max(100000),
