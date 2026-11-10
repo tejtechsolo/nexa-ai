@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { validateJsonContent, validateSameOrigin } from '@/lib/security/request-guard';
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -38,6 +39,10 @@ export async function GET(_request: Request, context: Context) {
 }
 
 export async function PATCH(request: Request, context: Context) {
+  const originError = validateSameOrigin(request);
+  if (originError) return originError;
+  const contentError = validateJsonContent(request, 4096);
+  if (contentError) return contentError;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
@@ -63,7 +68,9 @@ export async function PATCH(request: Request, context: Context) {
   return NextResponse.json({ conversation: data });
 }
 
-export async function DELETE(_request: Request, context: Context) {
+export async function DELETE(request: Request, context: Context) {
+  const originError = validateSameOrigin(request);
+  if (originError) return originError;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
