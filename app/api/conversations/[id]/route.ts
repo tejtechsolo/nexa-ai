@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { validateJsonContent, validateSameOrigin } from '@/lib/security/request-guard';
+import { readJsonBody, validateJsonContent, validateSameOrigin } from '@/lib/security/request-guard';
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -47,7 +47,9 @@ export async function PATCH(request: Request, context: Context) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   const { id } = await context.params;
-  const body = await request.json().catch(() => ({}));
+  const bodyResult = await readJsonBody(request, 4096);
+  if (bodyResult.error) return bodyResult.error;
+  const body = bodyResult.data as { title?: unknown };
   const title = typeof body?.title === 'string' ? body.title.trim().slice(0, 120) : '';
 
   if (!title) return NextResponse.json({ error: 'Title is required' }, { status: 400 });
