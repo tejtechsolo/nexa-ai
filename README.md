@@ -14,6 +14,12 @@ NexaAI is a secure, extensible AI-chatbot SaaS foundation for conversations, res
 - Daily AI usage quota and model allowlist
 - Advanced chat UX: Markdown, GFM, syntax-highlighted code, copy actions, regenerate, edit/resend, stop generation, auto-scroll, timestamps, search, rename, keyboard shortcuts, prompt suggestions, and responsive mobile navigation
 - Secure conversation rewind endpoint for editing history
+- Per-user API rate limiting (10/minute and 100/hour) and daily AI quota
+- Database-backed security audit events for completed AI generations
+- Same-origin and JSON content-type/declared-size checks on mutating endpoints
+- Browser security headers, HSTS, and CSP Report-Only baseline
+- Health/readiness endpoint at `/api/health`
+- Server-side Supabase environment validation
 - GitHub Actions quality workflow for typecheck, lint, tests, and build
 - TypeScript strict configuration
 - Tailwind CSS/PostCSS setup
@@ -34,14 +40,6 @@ NexaAI is a secure, extensible AI-chatbot SaaS foundation for conversations, res
 
 - Password reset completion screen
 - Additional provider adapters (Anthropic, Google, OpenRouter)
-- Files, embeddings, and RAG
-- Agents and workflow execution
-- Teams, invitations, and granular RBAC
-- Admin console
-- Stripe billing and plan enforcement
-- Audit logs, observability, and alerting
-- End-to-end browser tests
-- Production CI/CD and deployment hardening
 - Files, embeddings, and RAG
 - Agents and workflow execution
 - Teams, invitations, and granular RBAC
@@ -105,7 +103,7 @@ Never commit `.env.local`. Only variables prefixed with `NEXT_PUBLIC_` are inten
 4. Add redirect URLs:
    - `http://localhost:3000/auth/callback`
    - `https://your-domain.example/auth/callback`
-5. Apply the SQL migration in `supabase/migrations/0001_profiles.sql` using the Supabase SQL editor or Supabase CLI.
+5. Apply all SQL migrations in order: `0001_profiles.sql` through `0004_security_reliability.sql` using the Supabase SQL editor or Supabase CLI.
 6. Test signup, email verification, login, and logout.
 
 ## First-time user guide
@@ -140,6 +138,16 @@ After installation, NexaAI opens in a standalone application window when the bro
 - Use provider adapters so AI vendors can be changed without rewriting product logic.
 - Track usage, costs, failures, and security-sensitive actions.
 - Prefer small feature modules with reusable UI and service layers.
+
+## Security and operations
+
+- Apply every migration in numeric order before enabling chat traffic.
+- `/api/health` checks required Supabase and default-provider environment configuration; it does not expose secret values.
+- Authenticated chat requests are limited to 10 per minute, 100 per hour, and the configured daily AI quota.
+- The current CSP is `Content-Security-Policy-Report-Only`; review browser reports and explicitly enumerate required script/connect sources before enforcing it.
+- Configure HTTPS and production environment secrets in the hosting provider. Never commit `.env.local` or service-role credentials.
+- Rate-limit counters and audit events are server-write-only; authenticated users cannot directly query or mutate these tables.
+- The API request guard checks same-origin metadata and declared content length. A reverse proxy/platform request-size limit should also be configured for production.
 
 ## Testing strategy
 
