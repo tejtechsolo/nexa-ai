@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { validateJsonContent, validateSameOrigin } from '@/lib/security/request-guard';
+import { readJsonBody, validateJsonContent, validateSameOrigin } from '@/lib/security/request-guard';
 
 export const runtime = 'nodejs';
 
@@ -17,7 +17,9 @@ export async function POST(
   if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
   const { id } = await params;
-  const body = await request.json().catch(() => null) as { messageId?: string } | null;
+  const bodyResult = await readJsonBody(request, 4096);
+  if (bodyResult.error) return bodyResult.error;
+  const body = bodyResult.data as { messageId?: string } | null;
   if (!body?.messageId) return NextResponse.json({ error: 'messageId is required' }, { status: 400 });
 
   const { data: target } = await supabase.from('messages')
