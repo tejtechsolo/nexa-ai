@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { validateJsonContent, validateSameOrigin } from '@/lib/security/request-guard';
+import { readJsonBody, validateJsonContent, validateSameOrigin } from '@/lib/security/request-guard';
 
 export async function GET() {
   const supabase = await createClient();
@@ -29,7 +29,9 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
-  const body = await request.json().catch(() => ({}));
+  const bodyResult = await readJsonBody(request, 4096);
+  if (bodyResult.error) return bodyResult.error;
+  const body = bodyResult.data as { title?: unknown };
   const title = typeof body?.title === 'string' ? body.title.trim().slice(0, 120) : 'New conversation';
 
   const { data, error } = await supabase
