@@ -3,7 +3,7 @@ import { createOpenAICompatibleProvider } from '@/lib/ai/openai-compatible';
 import { chatRequestSchema } from '@/lib/validation/chat';
 import { createClient } from '@/lib/supabase/server';
 import { DAILY_REQUEST_LIMIT, DEFAULT_MODEL } from '@/lib/ai/models';
-import { validateJsonContent, validateSameOrigin } from '@/lib/security/request-guard';
+import { readJsonBody, validateJsonContent, validateSameOrigin } from '@/lib/security/request-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,8 +18,9 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
-  const body = await request.json().catch(() => null);
-  const parsed = chatRequestSchema.safeParse(body);
+  const bodyResult = await readJsonBody(request, 256 * 1024);
+  if (bodyResult.error) return bodyResult.error;
+  const parsed = chatRequestSchema.safeParse(bodyResult.data);
   if (!parsed.success) {
     return NextResponse.json({ error: 'Invalid chat request', issues: parsed.error.flatten() }, { status: 400 });
   }
