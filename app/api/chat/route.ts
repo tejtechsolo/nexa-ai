@@ -3,11 +3,17 @@ import { createOpenAICompatibleProvider } from '@/lib/ai/openai-compatible';
 import { chatRequestSchema } from '@/lib/validation/chat';
 import { createClient } from '@/lib/supabase/server';
 import { DAILY_REQUEST_LIMIT, DEFAULT_MODEL } from '@/lib/ai/models';
+import { validateJsonContent, validateSameOrigin } from '@/lib/security/request-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
+  const originError = validateSameOrigin(request);
+  if (originError) return originError;
+  const contentError = validateJsonContent(request, 256 * 1024);
+  if (contentError) return contentError;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
@@ -20,11 +26,6 @@ export async function POST(request: Request) {
 
   const { conversationId, messages, action } = parsed.data;
   const model = parsed.data.model ?? DEFAULT_MODEL;
-
-  const { data: conversation } = await supabase.from('conversations')
-    .select('id').eq('id', conversationId).eq('user_id', user.id).maybeSingle();
-  if (!conversation) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
-
   const lastMessage = messages[messages.length - 1];
   const lastUserMessage = [...messages].reverse().find((message) => message.role === 'user');
 
@@ -32,16 +33,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'A new request must end with a user message' }, { status: 400 });
   }
   if (action === 'regenerate' && lastMessage?.role === 'assistant') {
-    return NextResponse.json({ error: 'Regenerate must exclude the previous assistant response' }, { status: 400 });
+    return NextResponse.json({ error: 'Regenerate history must exclude the previous assistant response' }, { status: 400 });
   }
   if (!lastUserMessage) return NextResponse.json({ error: 'A user message is required' }, { status: 400 });
 
+  const { data: conversation } = await supabase.from('conversations')
+    .select('id').eq('id', conversationId).eq('user_id', user.id).maybeSingle();
+  if (!conversation) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+
+  const { data: rateLimit, error: rateLimitError } = await supabase.rpc('consume_api_rate_limit', {
+    p_minute_limit: 10, p_hour_limit: 100,
+  });
+  if (rateLimitError) {
+    console.error('api_rate_limit_error', rateLimitError);
+    return NextResponse.json({ error: 'Unable to verify request limits' }, { status: 503 });
+  }
+  const rate = Array.isArray(rateLimit) ? rateLimit[0] : rateLimit;
+  if (!rate?.allowed) {
+    return NextResponse.json({ error: 'Too many requests. Please try again shortly.' }, {
+      status: 429,
+      headers: { 'retry-after': String(rate?.retry_after_seconds ?? 60) },
+    });
+  }
+
   const inputCharacters = messages.reduce((total, message) => total + message.content.length, 0);
   const { data: quota, error: quotaError } = await supabase.rpc('consume_ai_request', {
-    p_input_characters: inputCharacters,
-    p_daily_limit: DAILY_REQUEST_LIMIT,
+    p_input_characters: inputCharacters, p_daily_limit: DAILY_REQUEST_LIMIT,
   });
-
   if (quotaError) {
     console.error('usage_quota_error', quotaError);
     return NextResponse.json({ error: 'Unable to verify usage quota' }, { status: 503 });
@@ -49,11 +67,9 @@ export async function POST(request: Request) {
 
   const quotaResult = Array.isArray(quota) ? quota[0] : quota;
   if (!quotaResult?.allowed) {
-    return NextResponse.json({
-      error: 'Daily AI request limit reached',
-      remaining: 0,
-      dailyLimit: DAILY_REQUEST_LIMIT,
-    }, { status: 429, headers: { 'retry-after': '86400' } });
+    return NextResponse.json({ error: 'Daily AI request limit reached', remaining: 0, dailyLimit: DAILY_REQUEST_LIMIT }, {
+      status: 429, headers: { 'retry-after': '86400' },
+    });
   }
 
   if (action === 'send') {
@@ -82,21 +98,12 @@ export async function POST(request: Request) {
 
       if (action === 'regenerate') {
         const { data: previousAssistant } = await supabase.from('messages')
-          .select('id')
-          .eq('conversation_id', conversationId)
-          .eq('user_id', user.id)
-          .eq('role', 'assistant')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
+          .select('id').eq('conversation_id', conversationId).eq('user_id', user.id)
+          .eq('role', 'assistant').order('created_at', { ascending: false }).limit(1).maybeSingle();
         if (previousAssistant) {
-          const { error: deleteError } = await supabase.from('messages')
-            .delete()
-            .eq('id', previousAssistant.id)
-            .eq('conversation_id', conversationId)
-            .eq('user_id', user.id);
-          if (deleteError) console.error('regenerate_cleanup_error', deleteError);
+          const { error } = await supabase.from('messages').delete()
+            .eq('id', previousAssistant.id).eq('conversation_id', conversationId).eq('user_id', user.id);
+          if (error) console.error('regenerate_cleanup_error', error);
         }
       }
 
@@ -104,10 +111,13 @@ export async function POST(request: Request) {
         conversation_id: conversationId, user_id: user.id, role: 'assistant', content: assistantText,
       });
       if (error) console.error('assistant_message_insert_error', error);
-      const { error: usageError } = await supabase.rpc('record_ai_output', {
-        p_output_characters: assistantText.length,
-      });
+      const { error: usageError } = await supabase.rpc('record_ai_output', { p_output_characters: assistantText.length });
       if (usageError) console.error('usage_output_record_error', usageError);
+      const { error: auditError } = await supabase.rpc('write_security_audit_event', {
+        p_event_type: action === 'regenerate' ? 'chat.regenerated' : 'chat.completed',
+        p_metadata: { conversation_id: conversationId, model, output_characters: assistantText.length },
+      });
+      if (auditError) console.error('audit_event_write_error', auditError);
     }
 
     const stream = new ReadableStream<Uint8Array>({
@@ -138,7 +148,7 @@ export async function POST(request: Request) {
       headers: {
         'content-type': 'text/plain; charset=utf-8',
         'cache-control': 'no-cache, no-transform',
-        connection: 'keep-alive',
+        'x-content-type-options': 'nosniff',
         'x-nexa-provider': provider.id,
         'x-nexa-model': model,
         'x-nexa-remaining': String(quotaResult.remaining ?? 0),
